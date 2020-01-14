@@ -15,6 +15,7 @@ import FoundationNetworking
 #endif
 
 import deferred
+import DeferredHTTP
 
 let baseURL = URL(string: "http://www.somewhere.com/")!
 let unavailableURL = URL(string: "http://127.0.0.1:65521/image.jpg")!

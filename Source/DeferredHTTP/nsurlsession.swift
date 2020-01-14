@@ -13,6 +13,9 @@ import Foundation
 import FoundationNetworking
 #endif
 
+import deferred
+import CurrentQoS
+
 public enum URLSessionError: Error, Equatable
 {
   case interruptedDownload(URLError, Data)

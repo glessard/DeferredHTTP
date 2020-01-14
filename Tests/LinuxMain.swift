@@ -1,8 +1,8 @@
 import XCTest
 
-import deferredTests
+import DeferredHTTPTests
 
 var tests = [XCTestCaseEntry]()
-tests += deferredTests.__allTests()
+tests += DeferredHTTPTests.__allTests()
 
 XCTMain(tests)
