@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1120"
+   LastUpgradeVersion = "1130"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -14,9 +14,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "deferred"
-               BuildableName = "deferred"
-               BlueprintName = "deferred"
+               BlueprintIdentifier = "DeferredHTTP"
+               BuildableName = "DeferredHTTP"
+               BlueprintName = "DeferredHTTP"
                ReferencedContainer = "container:">
             </BuildableReference>
          </BuildActionEntry>
@@ -28,16 +28,16 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "deferredTests"
-               BuildableName = "deferredTests"
-               BlueprintName = "deferredTests"
+               BlueprintIdentifier = "DeferredHTTPTests"
+               BuildableName = "DeferredHTTPTests"
+               BlueprintName = "DeferredHTTPTests"
                ReferencedContainer = "container:">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
-      buildConfiguration = "Release"
+      buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
@@ -47,9 +47,9 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "deferredTests"
-               BuildableName = "deferredTests"
-               BlueprintName = "deferredTests"
+               BlueprintIdentifier = "DeferredHTTPTests"
+               BuildableName = "DeferredHTTPTests"
+               BlueprintName = "DeferredHTTPTests"
                ReferencedContainer = "container:">
             </BuildableReference>
          </TestableReference>
@@ -75,9 +75,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "deferred"
-            BuildableName = "deferred"
-            BlueprintName = "deferred"
+            BlueprintIdentifier = "DeferredHTTP"
+            BuildableName = "DeferredHTTP"
+            BlueprintName = "DeferredHTTP"
             ReferencedContainer = "container:">
          </BuildableReference>
       </MacroExpansion>

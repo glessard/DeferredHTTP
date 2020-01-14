@@ -3,17 +3,17 @@
 import PackageDescription
 
 let package = Package(
-  name: "deferred",
+  name: "DeferredHTTP",
   products: [
-    .library(name: "deferred", type: .static, targets: ["deferred"]),
+    .library(name: "DeferredHTTP", targets: ["DeferredHTTP"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/glessard/swift-atomics.git", from: "6.0.0"),
+    .package(url: "https://github.com/glessard/deferred", .revision("ebf6a56ab5c3ab0f5e5df5645db64c0d0a0a50c2")),
     .package(url: "https://github.com/glessard/CurrentQoS.git", from: "1.1.0"),
   ],
   targets: [
-    .target(name: "deferred", dependencies: ["CAtomics", "CurrentQoS"]),
-    .testTarget(name: "deferredTests", dependencies: ["deferred"]),
+    .target(name: "DeferredHTTP", dependencies: ["deferred", "CurrentQoS"]),
+    .testTarget(name: "DeferredHTTPTests", dependencies: ["DeferredHTTP", "deferred"]),
   ],
-  swiftLanguageVersions: [.v4_2, .v5]
+  swiftLanguageVersions: [.v4, .v4_2, .v5]
 )
