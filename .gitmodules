@@ -1,6 +1,0 @@
-[submodule "Xcode/dependencies/Atomics"]
-	path = Xcode/dependencies/Atomics
-	url = https://github.com/glessard/swift-atomics.git
-[submodule "Xcode/dependencies/CurrentQoS"]
-	path = Xcode/dependencies/CurrentQoS
-	url = https://github.com/glessard/CurrentQoS.git
