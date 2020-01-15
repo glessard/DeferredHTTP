@@ -18,7 +18,7 @@ swift test ${TEST_OPTIONS}
 
 if [[ "${COMPILER_MAJOR_VERSION}" = "5" ]]
 then
-  VERSIONS="4.2 4"
+  VERSIONS=""
 fi
 
 for LANGUAGE_VERSION in $VERSIONS
