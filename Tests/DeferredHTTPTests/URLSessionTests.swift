@@ -158,7 +158,7 @@ extension URLSessionTests
 
   func testDownload_OK() throws
   {
-#if os(Linux) && swift(<5.1.4)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     TestURLServer.register(url: textURL, response: simpleGET(_:))
@@ -413,7 +413,7 @@ extension URLSessionTests
 
   func testDownload_NotFound() throws
   {
-#if os(Linux) && swift(<5.1.4)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     TestURLServer.register(url: missingURL, response: missingGET(_:))
@@ -483,7 +483,7 @@ extension URLSessionTests
 
   func testData_Partial() throws
   {
-#if os(Linux) && swift(<5.1.4)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     TestURLServer.register(url: failURL, response: partialGET(_:))
@@ -671,7 +671,7 @@ extension URLSessionTests
 
   func testInvalidDataTaskURL2() throws
   {
-#if os(Linux) && swift(<5.1.4)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     let request = URLRequest(url: URL(string: "schemeless") ?? invalidURL)
@@ -724,7 +724,7 @@ extension URLSessionTests
 
   func testInvalidUploadTaskURL2() throws
   {
-#if os(Linux) && swift(<5.1.4)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     let request = URLRequest(url: invalidURL)
@@ -858,7 +858,7 @@ class URLSessionResumeTests: XCTestCase
 
   func testURLRequestTimeout1() throws
   { // time out a URL request via session configuration
-#if os(Linux) && !swift(>=5.1.4)
+#if os(Linux) && !swift(>=5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     URLSessionResumeTests.configuration.timeoutIntervalForRequest = 1.0
@@ -887,7 +887,7 @@ class URLSessionResumeTests: XCTestCase
 
   func testURLRequestTimeout2() throws
   { // time out a URL request via request configuration
-#if os(Linux) && swift(<5.1.4)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     let session = URLSession(configuration: URLSessionResumeTests.configuration)
