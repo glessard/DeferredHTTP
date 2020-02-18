@@ -199,8 +199,7 @@ extension URLSessionTests
     var deferred: DeferredURLSessionTask<(Data, HTTPURLResponse)>! = nil
     queue.sync {
       deferred  = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
-      let canceled = deferred.cancel()
-      XCTAssert(canceled)
+      deferred.cancel()
       XCTAssertEqual(deferred.state, .resolved)
     }
 
@@ -229,8 +228,7 @@ extension URLSessionTests
     queue.sync {}
 
     XCTAssertNotNil(deferred.urlSessionTask)
-    let canceled = deferred.cancel()
-    XCTAssertEqual(canceled, true)
+    deferred.cancel()
 
     do {
       let _ = try deferred.get()
@@ -240,7 +238,7 @@ extension URLSessionTests
       XCTAssertEqual(error.code, .cancelled)
     }
 
-    XCTAssertEqual(deferred.cancel(), false)
+    deferred.cancel()
   }
 
   func testData_SuspendCancel() throws
@@ -261,8 +259,7 @@ extension URLSessionTests
     task.suspend()
     XCTAssertEqual(task.state, .suspended)
 
-    let canceled = deferred.cancel()
-    XCTAssertEqual(canceled, true)
+    deferred.cancel()
 
     do {
       let _ = try deferred.get()
@@ -281,8 +278,7 @@ extension URLSessionTests
     var deferred: DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>! = nil
     queue.sync {
       deferred = session.deferredDownloadTask(queue: queue, with: URLRequest(url: unavailableURL))
-      let canceled = deferred.cancel()
-      XCTAssert(canceled)
+      deferred.cancel()
       XCTAssertEqual(deferred.state, .resolved)
     }
 
@@ -311,8 +307,7 @@ extension URLSessionTests
     queue.sync {}
 
     XCTAssertNotNil(deferred.urlSessionTask)
-    let canceled = deferred.cancel()
-    XCTAssertEqual(canceled, true)
+    deferred.cancel()
 
     do {
       let _ = try deferred.get()
@@ -322,7 +317,7 @@ extension URLSessionTests
       XCTAssertEqual(error.code, .cancelled)
     }
 
-    XCTAssertEqual(deferred.cancel(), false)
+    deferred.cancel()
   }
 
   func testDownload_SuspendCancel() throws
@@ -339,8 +334,7 @@ extension URLSessionTests
     queue.sync {}
 
     deferred.urlSessionTask?.suspend()
-    let canceled = deferred.cancel()
-    XCTAssert(canceled)
+    deferred.cancel()
 
     do {
       let _ = try deferred.get()
@@ -371,8 +365,7 @@ extension URLSessionTests
     deferred.beginExecution()
     queue.sync {}
 
-    let canceled = deferred.cancel()
-    XCTAssert(canceled)
+    deferred.cancel()
 
     do {
       let _ = try deferred.get()
