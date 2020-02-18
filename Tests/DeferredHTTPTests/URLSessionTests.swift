@@ -858,7 +858,7 @@ class URLSessionResumeTests: XCTestCase
 
   func testURLRequestTimeout1() throws
   { // time out a URL request via session configuration
-#if os(Linux) && !swift(>=5.1.5)
+#if os(Linux) && swift(<5.1.5)
     print("this test does not succeed due to a corelibs-foundation bug")
 #else
     URLSessionResumeTests.configuration.timeoutIntervalForRequest = 1.0
