@@ -66,17 +66,16 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
     }
   }
 
-  @discardableResult
-  public override func cancel(_ error: Cancellation) -> Bool
+  open override func attemptCancellation() -> Bool
   {
-    guard !self.isResolved else { return false }
-    guard let task = urlSessionTask else { return super.cancel(error) }
-
-    let state = task.state
-    guard state == .running || state == .suspended else { return false }
-
-    // try to propagate the cancellation upstream
-    task.cancel()
+    if let task = urlSessionTask
+    {
+      if task.state != .completed
+      { // try to propagate the cancellation upstream
+        task.cancel()
+        return false
+      }
+    }
     return true
   }
 }
@@ -189,23 +188,17 @@ extension URLSession
 
 private class DeferredDownloadTask<Success>: DeferredURLSessionTask<Success>
 {
-  @discardableResult
-  public override func cancel(_ error: Cancellation) -> Bool
+  open override func attemptCancellation() -> Bool
   {
-    guard !self.isResolved else { return false }
-    guard let task = urlSessionTask as? URLSessionDownloadTask else { return super.cancel(error) }
-
-    let state = task.state
-    guard state == .running || state == .suspended else { return false }
-
-#if os(Linux) && !compiler(>=5.0)
-    // swift-corelibs-foundation calls NSUnimplemented() as the body of cancel(byProducingResumeData:)
-    task.cancel()
-#else
-    // try to propagate the cancellation upstream,
-    // and let the other completion handler gather the resume data.
-    task.cancel(byProducingResumeData: { _ in })
-#endif
+    if let task = urlSessionTask as? URLSessionDownloadTask
+    {
+      if task.state != .completed
+      { // try to propagate the cancellation upstream,
+        // and let the other completion handler gather the resume data.
+        task.cancel(byProducingResumeData: { _ in })
+        return false
+      }
+    }
     return true
   }
 }
