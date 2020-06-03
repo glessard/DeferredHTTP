@@ -341,9 +341,6 @@ extension URLSessionTests
     catch let error as URLError {
       XCTAssertEqual(error.code, .cancelled)
     }
-    catch URLSessionError.interruptedDownload(let error, _) {
-      XCTAssertEqual(error.code, .cancelled)
-    }
   }
 
   func testUploadData_CancelTask() throws
@@ -655,8 +652,9 @@ extension URLSessionTests
       _ = try task.get()
       XCTFail("succeeded incorrectly")
     }
-    catch Invalidation.invalid(let message) {
-      XCTAssert(message.contains(request.url?.scheme ?? "$$"))
+    catch let error as URLError where error.code == .unsupportedURL {
+      let message = error.userInfo["unsupportedURL"] as? String
+      XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
   }
 
@@ -674,8 +672,9 @@ extension URLSessionTests
       _ = try task.get()
       XCTFail("succeeded incorrectly")
     }
-    catch Invalidation.invalid(let message) {
-      XCTAssert(message.contains("invalid"))
+    catch let error as URLError where error.code == .unsupportedURL {
+      let message = error.userInfo["unsupportedURL"] as? String
+      XCTAssertEqual(message?.contains("invalid"), true)
     }
 #endif
   }
@@ -691,8 +690,9 @@ extension URLSessionTests
       _ = try task.get()
       XCTFail("succeeded incorrectly")
     }
-    catch Invalidation.invalid(let message) {
-      XCTAssert(message.contains(request.url?.scheme ?? "$$"))
+    catch let error as URLError where error.code == .unsupportedURL {
+      let message = error.userInfo["unsupportedURL"] as? String
+      XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
   }
 
@@ -708,8 +708,9 @@ extension URLSessionTests
       _ = try task.get()
       XCTFail("succeeded incorrectly")
     }
-    catch Invalidation.invalid(let message) {
-      XCTAssert(message.contains(request.url?.scheme ?? "$$"))
+    catch let error as URLError where error.code == .unsupportedURL {
+      let message = error.userInfo["unsupportedURL"] as? String
+      XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
   }
 
@@ -747,8 +748,9 @@ extension URLSessionTests
       _ = try task.get()
       XCTFail("succeeded incorrectly")
     }
-    catch Invalidation.invalid(let message) {
-      XCTAssert(message.contains(request.url?.scheme ?? "$$"))
+    catch let error as URLError where error.code == .unsupportedURL {
+      let message = error.userInfo["unsupportedURL"] as? String
+      XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
 #endif
   }
@@ -818,9 +820,11 @@ class URLSessionResumeTests: XCTestCase
           let data = try result.get().0.availableData
           resolver.resolve(value: data)
         }
-        catch URLSessionError.interruptedDownload(let error, let data) {
-          XCTAssertEqual(error.code, .cancelled)
-          resolver.resolve(value: data)
+        catch let e as URLError where e.code == .cancelled {
+          if let d = e.getPartialDownloadResumeData()
+          { resolver.resolve(value: d) }
+          else
+          { resolver.resolve(error: e) }
         }
         catch {
           resolver.resolve(error: error)
@@ -856,7 +860,7 @@ class URLSessionResumeTests: XCTestCase
     let session = URLSession(configuration: URLSessionResumeTests.configuration)
     defer { session.finishTasksAndInvalidate() }
 
-    let deferred = Deferred<(FileHandle, HTTPURLResponse), Error> {
+    let deferred = Deferred<(FileHandle, HTTPURLResponse), URLError> {
       resolver in
       let deferred = session.deferredDownloadTask(with: URLSessionResumeTests.largeURL)
       deferred.notify(handler: resolver.resolve)
@@ -866,12 +870,9 @@ class URLSessionResumeTests: XCTestCase
     do {
       let _ = try deferred.get()
     }
-    catch URLSessionError.interruptedDownload(let error, let data) {
+    catch let error as URLError {
       XCTAssertEqual(error.code, .timedOut)
-      XCTAssertNotEqual(data.count, 0)
-    }
-    catch let error as URLError where error.code == .timedOut {
-      print(error, error.errorUserInfo)
+      XCTAssertNotEqual(error.getPartialDownloadResumeData()?.count, 0)
     }
 #endif
   }
@@ -884,7 +885,7 @@ class URLSessionResumeTests: XCTestCase
     let session = URLSession(configuration: URLSessionResumeTests.configuration)
     defer { session.finishTasksAndInvalidate() }
 
-    let deferred = Deferred<(FileHandle, HTTPURLResponse), Error> {
+    let deferred = Deferred<(FileHandle, HTTPURLResponse), URLError> {
       resolver in
       let request = URLRequest(url: URLSessionResumeTests.largeURL, timeoutInterval: 0.5)
       let deferred = session.deferredDownloadTask(with: request)
@@ -895,12 +896,9 @@ class URLSessionResumeTests: XCTestCase
     do {
       let _ = try deferred.get()
     }
-    catch URLSessionError.interruptedDownload(let error, let data) {
+    catch let error as URLError {
       XCTAssertEqual(error.code, .timedOut)
-      XCTAssertNotEqual(data.count, 0)
-    }
-    catch let error as URLError where error.code == .timedOut {
-      print(error, error.errorUserInfo)
+      XCTAssertNotEqual(error.getPartialDownloadResumeData()?.count, 0)
     }
 #endif
   }
@@ -917,9 +915,11 @@ class URLSessionResumeTests: XCTestCase
         error in
         switch error
         {
-        case URLSessionError.interruptedDownload(let error, let data):
-          XCTAssertEqual(error.code, .cancelled)
-          resolver.resolve(value: data)
+        case URLError.cancelled:
+          if let data = error.getPartialDownloadResumeData()
+          { resolver.resolve(value: data) }
+          else
+          { resolver.resolve(error: error) }
         default:
           resolver.resolve(error: error)
         }
@@ -939,7 +939,7 @@ class URLSessionResumeTests: XCTestCase
     let resumed = session.deferredDownloadTask(withResumeData: data)
     switch resumed.error
     {
-    case URLSessionError.invalidState?:
+    case URLError.unknown?:
       // URLSession called back with a nonsensical combination of parameters, as expected
       break
     case let error?: throw error
@@ -958,11 +958,11 @@ class URLSessionResumeTests: XCTestCase
     switch task1.error
     {
     case URLError.unsupportedURL?:
-      XCTAssertNotNil((task1.error as? URLError)?.errorUserInfo[NSLocalizedDescriptionKey])
+      XCTAssertNotNil(task1.error?.errorUserInfo[NSLocalizedDescriptionKey])
 #if os(Linux)
-      XCTAssertNil((task1.error as? URLError)?.errorUserInfo[NSUnderlyingErrorKey])
+      XCTAssertNil(task1.error?.errorUserInfo[NSUnderlyingErrorKey])
 #endif
-    case URLSessionError.invalidState?:
+    case let e? where e.code == .unknown:
 #if !os(iOS)
       XCTFail()
 #endif
@@ -980,8 +980,8 @@ class URLSessionResumeTests: XCTestCase
     switch task.error
     {
     case URLError.unsupportedURL?:
-      XCTAssertNotNil((task.error as? URLError)?.errorUserInfo[NSLocalizedDescriptionKey])
-    case URLSessionError.invalidState?:
+      XCTAssertNotNil((task.error)?.errorUserInfo[NSLocalizedDescriptionKey])
+    case URLError.unknown?:
 #if !os(iOS)
       XCTFail()
 #endif
