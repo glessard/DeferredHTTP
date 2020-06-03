@@ -29,10 +29,10 @@ private struct Weak<T: AnyObject>
 
 public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
 {
-  private let deferredURLSessionTask: Deferred<Weak<URLSessionTask>, Invalidation>
+  private let taskHolder: Deferred<Weak<URLSessionTask>, Cancellation>
 
   public var urlSessionTask: URLSessionTask? {
-    if case let .success(weak)? = deferredURLSessionTask.peek()
+    if case let .success(weak)? = taskHolder.peek()
     {
       return weak.reference
     }
@@ -41,21 +41,28 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
 
   fileprivate init(queue: DispatchQueue, error: Error)
   {
-    deferredURLSessionTask = Deferred(queue: queue, error: Invalidation.invalid(""))
+    taskHolder = Deferred(queue: queue, error: .notSelected)
     super.init(queue: queue) { $0.resolve(.failure(error)) }
   }
 
   init(queue: DispatchQueue, task: @escaping (Resolver<Success, Error>) -> URLSessionTask)
   {
-    let (taskResolver, deferredURLSessionTask) = Deferred<Weak<URLSessionTask>, Invalidation>.CreatePair(queue: queue)
-    self.deferredURLSessionTask = deferredURLSessionTask
+    let (taskResolver, taskHolder) = Deferred<Weak<URLSessionTask>, Cancellation>.CreatePair(queue: queue)
+    self.taskHolder = taskHolder
 
     super.init(queue: queue) {
       resolver in
       let urlSessionTask = task(resolver)
       resolver.retainSource(urlSessionTask)
-      taskResolver.resolve(value: Weak(reference: urlSessionTask))
-      urlSessionTask.resume()
+      if taskResolver.needsResolution
+      {
+        taskResolver.resolve(value: Weak(reference: urlSessionTask))
+        urlSessionTask.resume()
+      }
+      else
+      {
+        urlSessionTask.cancel()
+      }
     }
   }
 
@@ -66,17 +73,25 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
     }
   }
 
-  open override func attemptCancellation() -> Bool
+  open override var isCancellable: Bool { return true }
+
+  @discardableResult
+  open override func cancel(_ error: Cancellation) -> Bool
   {
-    if let task = urlSessionTask
-    {
-      if task.state != .completed
-      { // try to propagate the cancellation upstream
-        task.cancel()
-        return false
-      }
+    cancelTaskHolder()
+
+    if let task = urlSessionTask,
+       task.state != .completed
+    { // try to propagate the cancellation upstream
+      task.cancel()
+      return true
     }
-    return true
+    return false
+  }
+
+  fileprivate func cancelTaskHolder()
+  {
+    taskHolder.cancel(.notSelected)
   }
 }
 
@@ -188,18 +203,18 @@ extension URLSession
 
 private class DeferredDownloadTask<Success>: DeferredURLSessionTask<Success>
 {
-  open override func attemptCancellation() -> Bool
+  open override func cancel(_ error: Cancellation) -> Bool
   {
-    if let task = urlSessionTask as? URLSessionDownloadTask
-    {
-      if task.state != .completed
-      { // try to propagate the cancellation upstream,
-        // and let the other completion handler gather the resume data.
-        task.cancel(byProducingResumeData: { _ in })
-        return false
-      }
+    cancelTaskHolder()
+
+    if let task = urlSessionTask as? URLSessionDownloadTask,
+       task.state != .completed
+    { // try to propagate the cancellation upstream,
+      // and let the other completion handler gather the resume data.
+      task.cancel(byProducingResumeData: { _ in })
+      return true
     }
-    return true
+    return false
   }
 }
 
@@ -305,5 +320,36 @@ extension URLSession
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredDownloadTask(queue: queue, withResumeData: data)
+  }
+}
+
+extension DeferredURLSessionTask
+{
+  public func cancel()
+  {
+    _ = cancel(.notSelected)
+  }
+
+  @discardableResult
+  public func timeout(seconds: Double) -> DeferredURLSessionTask
+  {
+    return self.timeout(after: .now() + seconds)
+  }
+
+  @discardableResult
+  public func timeout(after deadline: DispatchTime) -> DeferredURLSessionTask
+  {
+    if self.isResolved { return self }
+
+    if deadline < .now()
+    {
+      cancel()
+    }
+    else if deadline != .distantFuture
+    {
+      let queue = DispatchQueue(label: "timeout", qos: qos)
+      queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel() }
+    }
+    return self
   }
 }
