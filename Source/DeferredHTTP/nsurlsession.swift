@@ -32,7 +32,7 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
   private let deferredURLSessionTask: Deferred<Weak<URLSessionTask>, Invalidation>
 
   public var urlSessionTask: URLSessionTask? {
-    if let result = deferredURLSessionTask.peek(), case let .success(weak) = result
+    if case let .success(weak)? = deferredURLSessionTask.peek()
     {
       return weak.reference
     }
