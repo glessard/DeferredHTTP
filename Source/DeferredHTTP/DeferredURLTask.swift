@@ -5,8 +5,6 @@
 //  Copyright © 2016-2020 Guillaume Lessard. All rights reserved.
 //
 
-import Foundation
-
 import Dispatch
 import Foundation
 
@@ -75,30 +73,43 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
   @discardableResult
   open override func cancel(_ error: Cancellation = .canceled("")) -> Bool
   {
-    cancelTaskHolder()
-
-    if let task = urlSessionTask,
+    let canceled = cancelTaskHolder()
+    if !canceled,
+       let task = urlSessionTask,
        task.state != .completed
     { // try to propagate the cancellation upstream
       task.cancel()
       return true
     }
-    return false
+    return canceled
   }
 
-  fileprivate func cancelTaskHolder()
+  fileprivate func cancelTaskHolder() -> Bool
   {
     taskHolder.cancel(.notSelected)
+    switch taskHolder.peek()
+    {
+    case .failure?: return true
+    default:        return false
+    }
   }
 }
 
 private func validateURL(_ request: URLRequest) -> URLError?
 {
   let scheme = request.url?.scheme ?? "invalid"
-  if scheme == "http" || scheme == "https" || scheme == DeferredDownloadTask.resumeScheme
+  if scheme == "http" || scheme == "https" || scheme == DeferredURLDownloadTask.resumeScheme
   {
     return nil
   }
+
+#if !os(macOS) && !os(iOS) && !os(tvOS) && !os(watchOS)
+  if scheme == DeferredURLDownloadTask.corelibsFoundationUnimplemented
+  {
+    let message = "Resumed downloads are not supported on this platform"
+    return URLError(.unsupportedURL, userInfo: [NSLocalizedDescriptionKey: message])
+  }
+#endif
 
   var info = [String: Any]()
   info["unsupportedURL"] = "DeferredURLTask does not support url scheme \"\(scheme)\""
@@ -106,21 +117,149 @@ private func validateURL(_ request: URLRequest) -> URLError?
   return URLError(.unsupportedURL, userInfo: info)
 }
 
-class DeferredDownloadTask: DeferredURLTask<FileHandle>
+public class DeferredURLDataTask: DeferredURLTask<Data>
+{
+  public init(with request: URLRequest, session: URLSession = .shared, queue: DispatchQueue)
+  {
+    super.init(request: request, queue: queue) {
+      session.dataTask(with: request, completionHandler: dataCompletion($0))
+    }
+  }
+
+  public convenience init(with request: URLRequest, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    let queue = DispatchQueue(label: #function, qos: qos)
+    self.init(with: request, session: session, queue: queue)
+  }
+
+  public convenience init(with url: URL, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    self.init(with: URLRequest(url: url), session: session, qos: qos)
+  }
+}
+
+public class DeferredURLUploadTask: DeferredURLTask<Data>
+{
+  public init(with request: URLRequest, fromData data: Data, session: URLSession = .shared, queue: DispatchQueue)
+  {
+    super.init(request: request, queue: queue) {
+      session.uploadTask(with: request, from: data, completionHandler: dataCompletion($0))
+    }
+  }
+
+  public convenience init(with request: URLRequest, fromData data: Data, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    let queue = DispatchQueue(label: #function, qos: qos)
+    self.init(with: request, fromData: data, session: session, queue: queue)
+  }
+
+  public init(with request: URLRequest, fromFile file: URL, session: URLSession = .shared, queue: DispatchQueue)
+  {
+    super.init(request: request, queue: queue) {
+      session.uploadTask(with: request, fromFile: file, completionHandler: dataCompletion($0))
+    }
+  }
+
+  public convenience init(with request: URLRequest, fromFile file: URL, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    let queue = DispatchQueue(label: #function, qos: qos)
+    self.init(with: request, fromFile: file, session: session, queue: queue)
+  }
+}
+
+public class DeferredURLDownloadTask: DeferredURLTask<FileHandle>
 {
   static let resumeScheme = "url-session-resume"
+  static let corelibsFoundationUnimplemented = "corelibs-foundation-unimplemented"
 
-  open override func cancel(_ error: Cancellation) -> Bool
+  public init(with request: URLRequest, session: URLSession = .shared, queue: DispatchQueue)
   {
-    cancelTaskHolder()
+    super.init(request: request, queue: queue) {
+      session.downloadTask(with: request, completionHandler: downloadCompletion($0))
+    }
+  }
 
-    if let task = urlSessionTask as? URLSessionDownloadTask,
+  public convenience init(with request: URLRequest, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    let queue = DispatchQueue(label: #function, qos: qos)
+    self.init(with: request, session: session, queue: queue)
+  }
+
+  public convenience init(with url: URL, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    self.init(with: URLRequest(url: url), session: session, qos: qos)
+  }
+
+  public init(withResumeData data: Data, session: URLSession = .shared, queue: DispatchQueue)
+  {
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+    let request = URLRequest(url: URL(string: "\(DeferredURLDownloadTask.resumeScheme):")!)
+#else
+    // swift-corelibs-foundation calls NSUnimplemented() as the body of downloadTask(withResumeData:)
+    // It should instead call the completion handler with URLError.unsupportedURL
+    let request = URLRequest(url: URL(string: "\(DeferredURLDownloadTask.corelibsFoundationUnimplemented):")!)
+#endif
+    super.init(request: request, queue: queue) {
+      session.downloadTask(withResumeData: data, completionHandler: downloadCompletion($0))
+    }
+  }
+
+  public convenience init(withResumeData data: Data, session: URLSession = .shared, qos: DispatchQoS = .current)
+  {
+    let queue = DispatchQueue(label: #function, qos: qos)
+    self.init(withResumeData: data, session: session, queue: queue)
+  }
+
+  @discardableResult
+  open override func cancel(_ error: Cancellation = .canceled("")) -> Bool
+  {
+    let canceled = cancelTaskHolder()
+    if !canceled,
+       let task = urlSessionTask as? URLSessionDownloadTask,
        task.state != .completed
     { // try to propagate the cancellation upstream,
       // and let the other completion handler gather the resume data.
       task.cancel(byProducingResumeData: { _ in })
       return true
     }
-    return false
+    return canceled
+  }
+}
+
+extension DeferredURLTask
+{
+  @discardableResult
+  public func timeout(seconds: Double) -> DeferredURLTask
+  {
+    return self.timeout(after: .now() + seconds)
+  }
+
+  @discardableResult
+  public func timeout(after deadline: DispatchTime) -> DeferredURLTask
+  {
+    if self.isResolved { return self }
+
+    if deadline < .now()
+    {
+      cancel()
+    }
+    else if deadline != .distantFuture
+    {
+      let queue = DispatchQueue(label: "timeout", qos: qos)
+      queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel() }
+    }
+    return self
+  }
+}
+
+extension URLError
+{
+  public func getPartialDownloadResumeData() -> Data?
+  {
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+    // rdar://29623544 and https://bugs.swift.org/browse/SR-3403
+    let URLSessionDownloadTaskResumeData = NSURLSessionDownloadTaskResumeData
+#endif
+    return userInfo[URLSessionDownloadTaskResumeData] as? Data
   }
 }
