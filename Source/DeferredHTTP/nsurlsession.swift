@@ -1,9 +1,8 @@
 //
 //  nsurlsession.swift
-//  deferred
 //
 //  Created by Guillaume Lessard on 10/02/2016.
-//  Copyright © 2016 Guillaume Lessard. All rights reserved.
+//  Copyright © 2016-2020 Guillaume Lessard. All rights reserved.
 //
 
 import Dispatch
@@ -15,95 +14,6 @@ import FoundationNetworking
 
 import deferred
 import CurrentQoS
-
-private struct Weak<T: AnyObject>
-{
-  weak var reference: T?
-}
-
-public class DeferredURLSessionTask<Success>: Deferred<Success, URLError>
-{
-  private let taskHolder: Deferred<Weak<URLSessionTask>, Cancellation>
-
-  public var urlSessionTask: URLSessionTask? {
-    if case let .success(weak)? = taskHolder.peek()
-    {
-      return weak.reference
-    }
-    return nil
-  }
-
-  public let request: URLRequest
-
-  init(request: URLRequest, queue: DispatchQueue,
-       task: @escaping (Resolver<Success, URLError>) -> URLSessionTask)
-  {
-    self.request = request
-    if let error = validateURL(request)
-    {
-      taskHolder = Deferred(queue: queue, result: .failure(.canceled("")))
-      super.init(queue: queue, result: .failure(error))
-      return
-    }
-
-    let (taskResolver, taskHolder) = Deferred<Weak<URLSessionTask>, Cancellation>.CreatePair(queue: queue)
-    self.taskHolder = taskHolder
-
-    super.init(queue: queue) {
-      resolver in
-      let urlSessionTask = task(resolver)
-      resolver.retainSource(urlSessionTask)
-      if taskResolver.needsResolution
-      {
-        taskResolver.resolve(value: Weak(reference: urlSessionTask))
-        urlSessionTask.resume()
-      }
-      else
-      {
-        urlSessionTask.cancel()
-      }
-    }
-  }
-
-  deinit {
-    if let state = urlSessionTask?.state
-    { // only signal the task if necessary
-      if state == .running || state == .suspended { urlSessionTask?.cancel() }
-    }
-  }
-
-  open override var isCancellable: Bool { return true }
-
-  @discardableResult
-  open override func cancel(_ error: Cancellation = .canceled("")) -> Bool
-  {
-    cancelTaskHolder()
-
-    if let task = urlSessionTask,
-       task.state != .completed
-    { // try to propagate the cancellation upstream
-      task.cancel()
-      return true
-    }
-    return false
-  }
-
-  fileprivate func cancelTaskHolder()
-  {
-    taskHolder.cancel(.notSelected)
-  }
-}
-
-private func validateURL(_ request: URLRequest) -> URLError?
-{
-  let scheme = request.url?.scheme ?? "invalid"
-  if scheme != "http" && scheme != "https" && scheme != "url-session-resume"
-  {
-    let message = "deferred does not support url scheme \"\(scheme)\""
-    return URLError(.unsupportedURL, userInfo: ["unsupportedURL": message])
-  }
-  return nil
-}
 
 private func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLError>)
   -> (Data?, URLResponse?, Error?) -> Void
@@ -134,71 +44,54 @@ private func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLErr
 extension URLSession
 {
   public func deferredDataTask(queue: DispatchQueue,
-                               with request: URLRequest) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                               with request: URLRequest) -> DeferredURLTask<Data>
   {
-    return DeferredURLSessionTask(request: request, queue: queue) {
+    return DeferredURLTask(request: request, queue: queue) {
       self.dataTask(with: request, completionHandler: dataCompletion($0))
     }
   }
 
   public func deferredDataTask(qos: DispatchQoS = .current,
-                               with request: URLRequest) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                               with request: URLRequest) -> DeferredURLTask<Data>
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredDataTask(queue: queue, with: request)
   }
 
   public func deferredDataTask(qos: DispatchQoS = .current,
-                               with url: URL) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                               with url: URL) -> DeferredURLTask<Data>
   {
     return deferredDataTask(qos: qos, with: URLRequest(url: url))
   }
 
   public func deferredUploadTask(queue: DispatchQueue,
-                                 with request: URLRequest, fromData bodyData: Data) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                                 with request: URLRequest, fromData bodyData: Data) -> DeferredURLTask<Data>
   {
-    return DeferredURLSessionTask(request: request, queue: queue) {
+    return DeferredURLTask(request: request, queue: queue) {
       self.uploadTask(with: request, from: bodyData, completionHandler: dataCompletion($0))
     }
   }
 
   public func deferredUploadTask(qos: DispatchQoS = .current,
-                                 with request: URLRequest, fromData bodyData: Data) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                                 with request: URLRequest, fromData bodyData: Data) -> DeferredURLTask<Data>
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredUploadTask(queue: queue, with: request, fromData: bodyData)
   }
 
   public func deferredUploadTask(queue: DispatchQueue,
-                                 with request: URLRequest, fromFile fileURL: URL) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                                 with request: URLRequest, fromFile fileURL: URL) -> DeferredURLTask<Data>
   {
-    return DeferredURLSessionTask(request: request, queue: queue) {
+    return DeferredURLTask(request: request, queue: queue) {
       self.uploadTask(with: request, fromFile: fileURL, completionHandler: dataCompletion($0))
     }
   }
 
   public func deferredUploadTask(qos: DispatchQoS = .current,
-                                 with request: URLRequest, fromFile fileURL: URL) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
+                                 with request: URLRequest, fromFile fileURL: URL) -> DeferredURLTask<Data>
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredUploadTask(queue: queue, with: request, fromFile: fileURL)
-  }
-}
-
-private class DeferredDownloadTask<Success>: DeferredURLSessionTask<Success>
-{
-  open override func cancel(_ error: Cancellation) -> Bool
-  {
-    cancelTaskHolder()
-
-    if let task = urlSessionTask as? URLSessionDownloadTask,
-       task.state != .completed
-    { // try to propagate the cancellation upstream,
-      // and let the other completion handler gather the resume data.
-      task.cancel(byProducingResumeData: { _ in })
-      return true
-    }
-    return false
   }
 }
 
@@ -245,7 +138,7 @@ private func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLRespons
 extension URLSession
 {
   public func deferredDownloadTask(queue: DispatchQueue,
-                                   with request: URLRequest) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
+                                   with request: URLRequest) -> DeferredURLTask<FileHandle>
   {
     return DeferredDownloadTask(request: request, queue: queue) {
       self.downloadTask(with: request, completionHandler: downloadCompletion($0))
@@ -253,20 +146,20 @@ extension URLSession
   }
 
   public func deferredDownloadTask(qos: DispatchQoS = .current,
-                                   with request: URLRequest) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
+                                   with request: URLRequest) -> DeferredURLTask<FileHandle>
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredDownloadTask(queue: queue, with: request)
   }
 
   public func deferredDownloadTask(qos: DispatchQoS = .current,
-                                   with url: URL) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
+                                   with url: URL) -> DeferredURLTask<FileHandle>
   {
     return deferredDownloadTask(qos: qos, with: URLRequest(url: url))
   }
 
   public func deferredDownloadTask(queue: DispatchQueue,
-                                   withResumeData data: Data) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
+                                   withResumeData data: Data) -> DeferredURLTask<FileHandle>
   {
     let request = URLRequest(url: URL(string: "url-session-resume:")!)
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
@@ -279,28 +172,28 @@ extension URLSession
     // let task = downloadTask(withResumeData: data, completionHandler: downloadCompletion(tbd))
     let message = "The operation \'\(#function)\' is not supported on this platform"
     let error = URLError(.unsupportedURL, userInfo: [NSLocalizedDescriptionKey: message])
-    return DeferredURLSessionTask(queue: queue, error: error)
+    return DeferredURLTask(queue: queue, error: error)
 #endif
   }
 
   public func deferredDownloadTask(qos: DispatchQoS = .current,
-                                   withResumeData data: Data) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
+                                   withResumeData data: Data) -> DeferredURLTask<FileHandle>
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredDownloadTask(queue: queue, withResumeData: data)
   }
 }
 
-extension DeferredURLSessionTask
+extension DeferredURLTask
 {
   @discardableResult
-  public func timeout(seconds: Double) -> DeferredURLSessionTask
+  public func timeout(seconds: Double) -> DeferredURLTask
   {
     return self.timeout(after: .now() + seconds)
   }
 
   @discardableResult
-  public func timeout(after deadline: DispatchTime) -> DeferredURLSessionTask
+  public func timeout(after deadline: DispatchTime) -> DeferredURLTask
   {
     if self.isResolved { return self }
 

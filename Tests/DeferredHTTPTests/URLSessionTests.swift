@@ -195,9 +195,9 @@ extension URLSessionTests
     let session = URLSession(configuration: .default)
 
     let queue = DispatchQueue(label: #function)
-    var deferred: DeferredURLSessionTask<(Data, HTTPURLResponse)>! = nil
+    var deferred: DeferredURLTask<Data>! = nil
     queue.sync {
-      deferred  = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
+      deferred = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
       deferred.cancel()
       XCTAssertNil(deferred.urlSessionTask)
       deferred.beginExecution()
@@ -274,7 +274,7 @@ extension URLSessionTests
     let session = URLSession(configuration: .default)
 
     let queue = DispatchQueue(label: #function)
-    var deferred: DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>! = nil
+    var deferred: DeferredURLTask<FileHandle>! = nil
     queue.sync {
       deferred = session.deferredDownloadTask(queue: queue, with: URLRequest(url: unavailableURL))
       deferred.cancel()
@@ -655,6 +655,7 @@ extension URLSessionTests
     catch let error as URLError where error.code == .unsupportedURL {
       let message = error.userInfo["unsupportedURL"] as? String
       XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
+      XCTAssertEqual(request.url, error.userInfo[NSURLErrorKey] as? URL)
     }
   }
 
