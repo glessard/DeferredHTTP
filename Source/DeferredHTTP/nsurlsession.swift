@@ -15,32 +15,6 @@ import FoundationNetworking
 import deferred
 import CurrentQoS
 
-private func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLError>)
-  -> (Data?, URLResponse?, Error?) -> Void
-{
-  return {
-    (data: Data?, response: URLResponse?, error: Error?) in
-
-    if error != nil
-    { // note that response isn't necessarily `nil` here,
-      // but does it ever contain anything that's not in the Error?
-      let error = (error as? URLError) ?? URLError(.unknown)
-      resolver.resolve(error: error)
-      return
-    }
-
-    if let r = response as? HTTPURLResponse
-    {
-      if let d = data
-      { resolver.resolve(value: (d,r)) }
-      else
-      { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
-    }
-    else // Probably an impossible situation
-    { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
-  }
-}
-
 extension URLSession
 {
   public func deferredDataTask(queue: DispatchQueue,
@@ -92,46 +66,6 @@ extension URLSession
   {
     let queue = DispatchQueue(label: "deferred-urlsessiontask", qos: .utility)
     return deferredUploadTask(queue: queue, with: request, fromFile: fileURL)
-  }
-}
-
-private func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLResponse), URLError>)
-  -> (URL?, URLResponse?, Error?) -> Void
-{
-  return {
-    (location: URL?, response: URLResponse?, error: Error?) in
-
-    if error != nil
-    { // note that response isn't necessarily `nil` here,
-      // but does it ever contain anything that's not in the Error?
-      let error = (error as? URLError) ?? URLError(.unknown)
-      resolver.resolve(error: error)
-      return
-    }
-
-#if os(Linux) && false
-    print(location ?? "no file location given")
-    print(response.map(String.init(describing:)) ?? "no response")
-#endif
-
-    if let response = response as? HTTPURLResponse
-    {
-      if let url = location
-      {
-        do {
-          let handle = try FileHandle(forReadingFrom: url)
-          resolver.resolve(value: (handle, response))
-        }
-        catch {
-          let urlError = URLError(.cannotOpenFile, userInfo: [NSUnderlyingErrorKey: error])
-          resolver.resolve(error: urlError)
-        }
-      }
-      else // should not happen
-      { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
-    }
-    else // can happen if resume data is corrupted; otherwise probably an impossible situation
-    { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
   }
 }
 
