@@ -195,9 +195,9 @@ extension URLSessionTests
     let session = URLSession(configuration: .default)
 
     let queue = DispatchQueue(label: #function)
-    var deferred: DeferredURLSessionTask<(Data, HTTPURLResponse)>! = nil
+    var deferred: DeferredURLTask<Data>! = nil
     queue.sync {
-      deferred  = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
+      deferred = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
       deferred.cancel()
       XCTAssertNil(deferred.urlSessionTask)
       deferred.beginExecution()
@@ -274,7 +274,7 @@ extension URLSessionTests
     let session = URLSession(configuration: .default)
 
     let queue = DispatchQueue(label: #function)
-    var deferred: DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>! = nil
+    var deferred: DeferredURLTask<FileHandle>! = nil
     queue.sync {
       deferred = session.deferredDownloadTask(queue: queue, with: URLRequest(url: unavailableURL))
       deferred.cancel()
@@ -653,8 +653,9 @@ extension URLSessionTests
       XCTFail("succeeded incorrectly")
     }
     catch let error as URLError where error.code == .unsupportedURL {
-      let message = error.userInfo["unsupportedURL"] as? String
+      let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
+      XCTAssertEqual(request.url, error.userInfo[NSURLErrorKey] as? URL)
     }
   }
 
@@ -673,7 +674,7 @@ extension URLSessionTests
       XCTFail("succeeded incorrectly")
     }
     catch let error as URLError where error.code == .unsupportedURL {
-      let message = error.userInfo["unsupportedURL"] as? String
+      let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains("invalid"), true)
     }
 #endif
@@ -691,7 +692,7 @@ extension URLSessionTests
       XCTFail("succeeded incorrectly")
     }
     catch let error as URLError where error.code == .unsupportedURL {
-      let message = error.userInfo["unsupportedURL"] as? String
+      let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
   }
@@ -709,7 +710,7 @@ extension URLSessionTests
       XCTFail("succeeded incorrectly")
     }
     catch let error as URLError where error.code == .unsupportedURL {
-      let message = error.userInfo["unsupportedURL"] as? String
+      let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
   }
@@ -743,13 +744,14 @@ extension URLSessionTests
     handle.write(message)
     handle.truncateFile(atOffset: handle.offsetInFile)
     handle.closeFile()
-    let task = session.deferredUploadTask(with: request, fromFile: fileURL)
+    let task = session.deferredUploadTask(queue: DispatchQueue(label: #function),
+                                          with: request, fromFile: fileURL)
     do {
       _ = try task.get()
       XCTFail("succeeded incorrectly")
     }
     catch let error as URLError where error.code == .unsupportedURL {
-      let message = error.userInfo["unsupportedURL"] as? String
+      let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
     }
 #endif
@@ -954,7 +956,7 @@ class URLSessionResumeTests: XCTestCase
     defer { session.finishTasksAndInvalidate() }
 
     let nonsense = Data((0..<2345).map { UInt8.random(in: 0...UInt8(truncatingIfNeeded: $0)) })
-    let task1 = session.deferredDownloadTask(withResumeData: nonsense)
+    let task1 = session.deferredDownloadTask(queue: .global(), withResumeData: nonsense)
     switch task1.error
     {
     case URLError.unsupportedURL?:
