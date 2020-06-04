@@ -16,18 +16,12 @@ import FoundationNetworking
 import deferred
 import CurrentQoS
 
-public enum URLSessionError: Error, Equatable
-{
-  case interruptedDownload(URLError, Data)
-  case invalidState
-}
-
 private struct Weak<T: AnyObject>
 {
   weak var reference: T?
 }
 
-public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
+public class DeferredURLSessionTask<Success>: Deferred<Success, URLError>
 {
   private let taskHolder: Deferred<Weak<URLSessionTask>, Cancellation>
 
@@ -39,13 +33,13 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
     return nil
   }
 
-  fileprivate init(queue: DispatchQueue, error: Error)
+  fileprivate init(queue: DispatchQueue, error: URLError)
   {
     taskHolder = Deferred(queue: queue, error: .notSelected)
     super.init(queue: queue) { $0.resolve(.failure(error)) }
   }
 
-  init(queue: DispatchQueue, task: @escaping (Resolver<Success, Error>) -> URLSessionTask)
+  init(queue: DispatchQueue, task: @escaping (Resolver<Success, URLError>) -> URLSessionTask)
   {
     let (taskResolver, taskHolder) = Deferred<Weak<URLSessionTask>, Cancellation>.CreatePair(queue: queue)
     self.taskHolder = taskHolder
@@ -76,7 +70,7 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
   open override var isCancellable: Bool { return true }
 
   @discardableResult
-  open override func cancel(_ error: Cancellation) -> Bool
+  open override func cancel(_ error: Cancellation = .canceled("")) -> Bool
   {
     cancelTaskHolder()
 
@@ -95,27 +89,27 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, Error>
   }
 }
 
-private func validateURL(_ request: URLRequest) -> Invalidation?
+private func validateURL(_ request: URLRequest) -> URLError?
 {
   let scheme = request.url?.scheme ?? "invalid"
   if scheme != "http" && scheme != "https"
   {
     let message = "deferred does not support url scheme \"\(scheme)\""
-    return Invalidation.invalid(message)
+    return URLError(.unsupportedURL, userInfo: ["unsupportedURL": message])
   }
   return nil
 }
 
-private func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), Error>)
+private func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLError>)
   -> (Data?, URLResponse?, Error?) -> Void
 {
   return {
     (data: Data?, response: URLResponse?, error: Error?) in
 
-    if let error = error
-    {
-      // note that response isn't necessarily `nil` here,
+    if error != nil
+    { // note that response isn't necessarily `nil` here,
       // but does it ever contain anything that's not in the Error?
+      let error = (error as? URLError) ?? URLError(.unknown)
       resolver.resolve(error: error)
       return
     }
@@ -125,10 +119,10 @@ private func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), Error>
       if let d = data
       { resolver.resolve(value: (d,r)) }
       else
-      { resolver.resolve(error: URLSessionError.invalidState) }
+      { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
     }
     else // Probably an impossible situation
-    { resolver.resolve(error: URLSessionError.invalidState) }
+    { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
   }
 }
 
@@ -218,29 +212,16 @@ private class DeferredDownloadTask<Success>: DeferredURLSessionTask<Success>
   }
 }
 
-// FIXME: should we resolve to a FileHandle here?
-// on Mojave (perhaps?) tests are inconsistently failing with invalid URLs
-
-private func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLResponse), Error>)
+private func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLResponse), URLError>)
   -> (URL?, URLResponse?, Error?) -> Void
 {
   return {
     (location: URL?, response: URLResponse?, error: Error?) in
 
-#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-    // rdar://29623544 and https://bugs.swift.org/browse/SR-3403
-    let URLSessionDownloadTaskResumeData = NSURLSessionDownloadTaskResumeData
-#endif
-    if let error = error as? URLError,
-       let data = error.userInfo[URLSessionDownloadTaskResumeData] as? Data
-    {
-      resolver.resolve(error: URLSessionError.interruptedDownload(error, data))
-      return
-    }
-    else if let error = error
-    {
-      // note that response isn't necessarily `nil` here,
+    if error != nil
+    { // note that response isn't necessarily `nil` here,
       // but does it ever contain anything that's not in the Error?
+      let error = (error as? URLError) ?? URLError(.unknown)
       resolver.resolve(error: error)
       return
     }
@@ -259,14 +240,15 @@ private func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLRespons
           resolver.resolve(value: (handle, response))
         }
         catch {
-          resolver.resolve(error: error)
+          let urlError = URLError(.cannotOpenFile, userInfo: [NSUnderlyingErrorKey: error])
+          resolver.resolve(error: urlError)
         }
       }
       else // should not happen
-      { resolver.resolve(error: URLSessionError.invalidState) }
+      { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
     }
     else // can happen if resume data is corrupted; otherwise probably an impossible situation
-    { resolver.resolve(error: URLSessionError.invalidState) }
+    { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
   }
 }
 
@@ -325,11 +307,6 @@ extension URLSession
 
 extension DeferredURLSessionTask
 {
-  public func cancel()
-  {
-    _ = cancel(.notSelected)
-  }
-
   @discardableResult
   public func timeout(seconds: Double) -> DeferredURLSessionTask
   {
@@ -351,5 +328,17 @@ extension DeferredURLSessionTask
       queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel() }
     }
     return self
+  }
+}
+
+extension URLError
+{
+  public func getPartialDownloadResumeData() -> Data?
+  {
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+    // rdar://29623544 and https://bugs.swift.org/browse/SR-3403
+    let URLSessionDownloadTaskResumeData = NSURLSessionDownloadTaskResumeData
+#endif
+    return userInfo[URLSessionDownloadTaskResumeData] as? Data
   }
 }
