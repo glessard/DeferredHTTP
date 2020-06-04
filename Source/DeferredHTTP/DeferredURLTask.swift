@@ -112,7 +112,7 @@ private func validateURL(_ request: URLRequest) -> URLError?
 #endif
 
   var info = [String: Any]()
-  info["unsupportedURL"] = "DeferredURLTask does not support url scheme \"\(scheme)\""
+  info[NSLocalizedDescriptionKey] = "DeferredURLTask does not support url scheme \"\(scheme)\""
   info[NSURLErrorKey] = request.url
   return URLError(.unsupportedURL, userInfo: info)
 }
