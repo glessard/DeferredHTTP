@@ -33,14 +33,19 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, URLError>
     return nil
   }
 
-  fileprivate init(queue: DispatchQueue, error: URLError)
-  {
-    taskHolder = Deferred(queue: queue, error: .notSelected)
-    super.init(queue: queue) { $0.resolve(.failure(error)) }
-  }
+  public let request: URLRequest
 
-  init(queue: DispatchQueue, task: @escaping (Resolver<Success, URLError>) -> URLSessionTask)
+  init(request: URLRequest, queue: DispatchQueue,
+       task: @escaping (Resolver<Success, URLError>) -> URLSessionTask)
   {
+    self.request = request
+    if let error = validateURL(request)
+    {
+      taskHolder = Deferred(queue: queue, result: .failure(.canceled("")))
+      super.init(queue: queue, result: .failure(error))
+      return
+    }
+
     let (taskResolver, taskHolder) = Deferred<Weak<URLSessionTask>, Cancellation>.CreatePair(queue: queue)
     self.taskHolder = taskHolder
 
@@ -92,7 +97,7 @@ public class DeferredURLSessionTask<Success>: Deferred<Success, URLError>
 private func validateURL(_ request: URLRequest) -> URLError?
 {
   let scheme = request.url?.scheme ?? "invalid"
-  if scheme != "http" && scheme != "https"
+  if scheme != "http" && scheme != "https" && scheme != "url-session-resume"
   {
     let message = "deferred does not support url scheme \"\(scheme)\""
     return URLError(.unsupportedURL, userInfo: ["unsupportedURL": message])
@@ -131,12 +136,7 @@ extension URLSession
   public func deferredDataTask(queue: DispatchQueue,
                                with request: URLRequest) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
   {
-    if let error = validateURL(request)
-    {
-      return DeferredURLSessionTask(queue: queue, error: error)
-    }
-
-    return DeferredURLSessionTask(queue: queue) {
+    return DeferredURLSessionTask(request: request, queue: queue) {
       self.dataTask(with: request, completionHandler: dataCompletion($0))
     }
   }
@@ -157,12 +157,7 @@ extension URLSession
   public func deferredUploadTask(queue: DispatchQueue,
                                  with request: URLRequest, fromData bodyData: Data) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
   {
-    if let error = validateURL(request)
-    {
-      return DeferredURLSessionTask(queue: queue, error: error)
-    }
-
-    return DeferredURLSessionTask(queue: queue) {
+    return DeferredURLSessionTask(request: request, queue: queue) {
       self.uploadTask(with: request, from: bodyData, completionHandler: dataCompletion($0))
     }
   }
@@ -177,12 +172,7 @@ extension URLSession
   public func deferredUploadTask(queue: DispatchQueue,
                                  with request: URLRequest, fromFile fileURL: URL) -> DeferredURLSessionTask<(Data, HTTPURLResponse)>
   {
-    if let error = validateURL(request)
-    {
-      return DeferredURLSessionTask(queue: queue, error: error)
-    }
-
-    return DeferredURLSessionTask(queue: queue) {
+    return DeferredURLSessionTask(request: request, queue: queue) {
       self.uploadTask(with: request, fromFile: fileURL, completionHandler: dataCompletion($0))
     }
   }
@@ -257,12 +247,7 @@ extension URLSession
   public func deferredDownloadTask(queue: DispatchQueue,
                                    with request: URLRequest) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
   {
-    if let error = validateURL(request)
-    {
-      return DeferredURLSessionTask(queue: queue, error: error)
-    }
-
-    return DeferredDownloadTask(queue: queue) {
+    return DeferredDownloadTask(request: request, queue: queue) {
       self.downloadTask(with: request, completionHandler: downloadCompletion($0))
     }
   }
@@ -283,8 +268,9 @@ extension URLSession
   public func deferredDownloadTask(queue: DispatchQueue,
                                    withResumeData data: Data) -> DeferredURLSessionTask<(FileHandle, HTTPURLResponse)>
   {
+    let request = URLRequest(url: URL(string: "url-session-resume:")!)
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-    return DeferredDownloadTask(queue: queue) {
+    return DeferredDownloadTask(request: request, queue: queue) {
       self.downloadTask(withResumeData: data, completionHandler: downloadCompletion($0))
     }
 #else
