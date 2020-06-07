@@ -28,12 +28,7 @@ internal func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLEr
     }
 
     if let r = response as? HTTPURLResponse
-    {
-      if let d = data
-      { resolver.resolve(value: (d,r)) }
-      else
-      { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
-    }
+    { resolver.resolve(value: (data ?? Data(), r)) }
     else // Probably an impossible situation
     { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
   }
@@ -60,20 +55,9 @@ internal func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLRespon
 #endif
 
     if let response = response as? HTTPURLResponse
-    {
-      if let url = location
-      {
-        do {
-          let handle = try FileHandle(forReadingFrom: url)
-          resolver.resolve(value: (handle, response))
-        }
-        catch {
-          let urlError = URLError(.cannotOpenFile, userInfo: [NSUnderlyingErrorKey: error])
-          resolver.resolve(error: urlError)
-        }
-      }
-      else // should not happen
-      { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
+    { // send an open `FileHandle` or the `nullDevice` if there is an error
+      let handle = location.flatMap({ try? FileHandle(forReadingFrom: $0) }) ?? .nullDevice
+      resolver.resolve(value: (handle, response))
     }
     else // can happen if resume data is corrupted; otherwise probably an impossible situation
     { resolver.resolve(error: URLError(.unknown, userInfo: ["unknown": "invalid state at line \(#line)"])) }
