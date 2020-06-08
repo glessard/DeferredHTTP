@@ -609,18 +609,14 @@ extension URLSessionTests
     let message = Data(payload.utf8)
 
 #if compiler(>=5.1) || !os(Linux)
-    let userDir = try FileManager.default.url(for: .desktopDirectory,
-                                              in: .userDomainMask,
-                                              appropriateFor: nil,
-                                              create: false)
     let tempDir = try FileManager.default.url(for: .itemReplacementDirectory,
                                               in: .userDomainMask,
-                                              appropriateFor: userDir,
+                                              appropriateFor: URL(string: "file:///"),
                                               create: true)
 #else
     let tempDir = URL(string: "file:///tmp/")!
 #endif
-    let fileURL = tempDir.appendingPathComponent("temporary.tmp")
+    let fileURL = tempDir.appendingPathComponent(UUID().uuidString + ".tmp")
     FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
 
     let handle = try FileHandle(forWritingTo: fileURL)
@@ -726,18 +722,14 @@ extension URLSessionTests
 
     let message = Data("data".utf8)
 #if compiler(>=5.1) || !os(Linux)
-    let userDir = try FileManager.default.url(for: .desktopDirectory,
-                                              in: .userDomainMask,
-                                              appropriateFor: nil,
-                                              create: false)
     let tempDir = try FileManager.default.url(for: .itemReplacementDirectory,
                                               in: .userDomainMask,
-                                              appropriateFor: userDir,
+                                              appropriateFor: URL(string: "file:///"),
                                               create: true)
 #else
     let tempDir = URL(string: "file:///tmp/")!
 #endif
-    let fileURL = tempDir.appendingPathComponent("temporary.tmp")
+    let fileURL = tempDir.appendingPathComponent(UUID().uuidString + ".tmp")
     FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
 
     let handle = try FileHandle(forWritingTo: fileURL)
