@@ -254,9 +254,11 @@ extension URLSessionTests
     queue.sync {}
 
     XCTAssertNotNil(deferred.urlSessionTask)
-    let task = deferred.urlSessionTask!
-    task.suspend()
-    XCTAssertEqual(task.state, .suspended)
+    if let task = deferred.urlSessionTask
+    {
+      task.suspend()
+      XCTAssertEqual(task.state, .suspended)
+    }
 
     deferred.timeout(seconds: -1)
 
