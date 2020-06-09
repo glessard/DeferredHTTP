@@ -50,9 +50,7 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
       }
       else
       {
-        var info = [String: Any]()
-        info[NSURLErrorFailingURLErrorKey] = request.url
-        resolver.resolve(error: URLError(.cancelled, userInfo: info))
+        resolver.resolve(error: URLError(.cancelled, failingURL: request.url))
       }
     }
   }
@@ -108,10 +106,8 @@ private func validateURL(_ request: URLRequest) -> URLError?
   }
 #endif
 
-  var info = [String: Any]()
-  info[NSLocalizedDescriptionKey] = "DeferredURLTask does not support url scheme \"\(scheme)\""
-  info[NSURLErrorKey] = request.url
-  return URLError(.unsupportedURL, userInfo: info)
+  let message = "DeferredURLTask does not support url scheme \"\(scheme)\""
+  return URLError(.unsupportedURL, failingURL: request.url, description: message)
 }
 
 public class DeferredURLDataTask: DeferredURLTask<Data>
