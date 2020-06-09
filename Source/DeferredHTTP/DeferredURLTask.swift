@@ -28,7 +28,7 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
   }
 
   init(request: URLRequest, queue: DispatchQueue,
-       task: @escaping (Resolver<(Success, HTTPURLResponse), URLError>) -> URLSessionTask)
+       obtainTask: @escaping (Resolver<(Success, HTTPURLResponse), URLError>) -> URLSessionTask)
   {
     if let error = validateURL(request)
     {
@@ -41,16 +41,18 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
 
     super.init(queue: queue) {
       resolver in
-      let urlSessionTask = task(resolver)
-      resolver.retainSource(taskHolder)
       if taskResolver.needsResolution
       {
-        taskResolver.resolve(value: urlSessionTask)
+        let urlSessionTask = obtainTask(resolver)
         urlSessionTask.resume()
+        taskResolver.resolve(value: urlSessionTask)
+        resolver.retainSource(taskHolder)
       }
       else
       {
-        urlSessionTask.cancel()
+        var info = [String: Any]()
+        info[NSURLErrorFailingURLErrorKey] = request.url
+        resolver.resolve(error: URLError(.cancelled, userInfo: info))
       }
     }
   }
