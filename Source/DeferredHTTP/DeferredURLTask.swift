@@ -15,19 +15,14 @@ import FoundationNetworking
 import deferred
 import CurrentQoS
 
-private struct Weak<T: AnyObject>
-{
-  weak var reference: T?
-}
-
 public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLError>
 {
-  private let taskHolder: Deferred<Weak<URLSessionTask>, Cancellation>
+  private weak var taskHolder: Deferred<URLSessionTask, Cancellation>?
 
   public var urlSessionTask: URLSessionTask? {
-    if case let .success(weak)? = taskHolder.peek()
+    if case let .success(task)? = taskHolder?.peek()
     {
-      return weak.reference
+      return task
     }
     return nil
   }
@@ -37,21 +32,20 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
   {
     if let error = validateURL(request)
     {
-      taskHolder = Deferred(queue: queue, result: .failure(.canceled("")))
       super.init(queue: queue, result: .failure(error))
       return
     }
 
-    let (taskResolver, taskHolder) = Deferred<Weak<URLSessionTask>, Cancellation>.CreatePair(queue: queue)
+    let (taskResolver, taskHolder) = Deferred<URLSessionTask, Cancellation>.CreatePair(queue: queue)
     self.taskHolder = taskHolder
 
     super.init(queue: queue) {
       resolver in
       let urlSessionTask = task(resolver)
-      resolver.retainSource(urlSessionTask)
+      resolver.retainSource(taskHolder)
       if taskResolver.needsResolution
       {
-        taskResolver.resolve(value: Weak(reference: urlSessionTask))
+        taskResolver.resolve(value: urlSessionTask)
         urlSessionTask.resume()
       }
       else
@@ -86,6 +80,7 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
 
   fileprivate func cancelTaskHolder() -> Bool
   {
+    guard let taskHolder = taskHolder else { return false }
     taskHolder.cancel(.notSelected)
     switch taskHolder.peek()
     {
