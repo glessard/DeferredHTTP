@@ -17,7 +17,7 @@ import CurrentQoS
 
 public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLError>
 {
-  private weak var taskHolder: Deferred<URLSessionTask, Cancellation>?
+  private weak var taskHolder: Deferred<URLSessionTask, Never>?
 
   public var urlSessionTask: URLSessionTask? {
     if case let .success(task)? = taskHolder?.peek()
@@ -27,31 +27,27 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
     return nil
   }
 
+  private let url: URL?
+
   init(request: URLRequest, queue: DispatchQueue,
        obtainTask: @escaping (Resolver<(Success, HTTPURLResponse), URLError>) -> URLSessionTask)
   {
-    if let error = validateURL(request)
+    self.url = request.url
+    if let error = validateURL(url)
     {
       super.init(queue: queue, result: .failure(error))
       return
     }
 
-    let (taskResolver, taskHolder) = Deferred<URLSessionTask, Cancellation>.CreatePair(queue: queue)
+    let (taskResolver, taskHolder) = Deferred<URLSessionTask, Never>.CreatePair(queue: queue)
     self.taskHolder = taskHolder
 
     super.init(queue: queue) {
       resolver in
-      if taskResolver.needsResolution
-      {
-        let urlSessionTask = obtainTask(resolver)
-        urlSessionTask.resume()
-        taskResolver.resolve(value: urlSessionTask)
-        resolver.retainSource(taskHolder)
-      }
-      else
-      {
-        resolver.resolve(error: URLError(.cancelled, failingURL: request.url))
-      }
+      let urlSessionTask = obtainTask(resolver)
+      urlSessionTask.resume()
+      taskResolver.resolve(value: urlSessionTask)
+      resolver.retainSource(taskHolder)
     }
   }
 
@@ -62,37 +58,47 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
     }
   }
 
-  open override var isCancellable: Bool { return true }
-
-  @discardableResult
-  open override func cancel(_ error: Cancellation = .canceled("")) -> Bool
+  open override func convertCancellation(_ error: Cancellation) -> URLError?
   {
-    let canceled = cancelTaskHolder()
-    if !canceled,
-       let task = urlSessionTask,
+    let code: URLError.Code
+    switch error
+    {
+    case .canceled, .notSelected:
+      code = .cancelled
+    case .timedOut:
+      code = .timedOut
+    }
+    return URLError(code, failingURL: url, description: error.description)
+  }
+
+  fileprivate func cancelURLSessionTask() -> Bool
+  {
+    if let task = urlSessionTask,
        task.state != .completed
     { // try to propagate the cancellation upstream
       task.cancel()
       return true
     }
-    return canceled
+    return false
   }
 
-  fileprivate func cancelTaskHolder() -> Bool
+  open override func cancel(_ error: Cancellation)
   {
-    guard let taskHolder = taskHolder else { return false }
-    taskHolder.cancel(.notSelected)
-    switch taskHolder.peek()
+    if cancelURLSessionTask() == false
     {
-    case .failure?: return true
-    default:        return false
+      super.cancel(error)
     }
+  }
+
+  public func cancel(reason: String = "")
+  {
+    cancel(.canceled(reason))
   }
 }
 
-private func validateURL(_ request: URLRequest) -> URLError?
+private func validateURL(_ url: URL?) -> URLError?
 {
-  let scheme = request.url?.scheme ?? "invalid"
+  let scheme = url?.scheme ?? "invalid"
   if scheme == "http" || scheme == "https" || scheme == DeferredURLDownloadTask.resumeScheme
   {
     return nil
@@ -107,7 +113,7 @@ private func validateURL(_ request: URLRequest) -> URLError?
 #endif
 
   let message = "DeferredURLTask does not support url scheme \"\(scheme)\""
-  return URLError(.unsupportedURL, failingURL: request.url, description: message)
+  return URLError(.unsupportedURL, failingURL: url, description: message)
 }
 
 public class DeferredURLDataTask: DeferredURLTask<Data>
@@ -203,43 +209,40 @@ public class DeferredURLDownloadTask: DeferredURLTask<FileHandle>
     self.init(withResumeData: data, session: session, queue: queue)
   }
 
-  @discardableResult
-  open override func cancel(_ error: Cancellation = .canceled("")) -> Bool
+  fileprivate override func cancelURLSessionTask() -> Bool
   {
-    let canceled = cancelTaskHolder()
-    if !canceled,
-       let task = urlSessionTask as? URLSessionDownloadTask,
+    if let task = urlSessionTask as? URLSessionDownloadTask,
        task.state != .completed
     { // try to propagate the cancellation upstream,
       // and let the other completion handler gather the resume data.
       task.cancel(byProducingResumeData: { _ in })
       return true
     }
-    return canceled
+    return false
   }
 }
 
 extension DeferredURLTask
 {
   @discardableResult
-  public func timeout(seconds: Double) -> DeferredURLTask
+  public func timeout(seconds: Double, reason: String = "") -> DeferredURLTask
   {
-    return self.timeout(after: .now() + seconds)
+    return self.timeout(after: .now() + seconds, reason: reason)
   }
 
   @discardableResult
-  public func timeout(after deadline: DispatchTime) -> DeferredURLTask
+  public func timeout(after deadline: DispatchTime, reason: String = "") -> DeferredURLTask
   {
     if self.isResolved { return self }
 
     if deadline < .now()
     {
-      cancel()
+      cancel(.canceled(reason))
     }
     else if deadline != .distantFuture
     {
       let queue = DispatchQueue(label: "timeout", qos: qos)
-      queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel() }
+      queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel(.canceled(reason)) }
     }
     return self
   }
