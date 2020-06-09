@@ -238,7 +238,12 @@ extension URLSessionTests
     }
     catch let error as URLError {
       XCTAssertEqual(error.code, .cancelled)
+#if os(Linux) && swift(<5.2.5)
+      print("this tests a corelibs-foundation omission")
+      XCTAssertEqual(error.userInfo.isEmpty, true)
+#else
       XCTAssertEqual(request.url, error.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+#endif
     }
   }
 
