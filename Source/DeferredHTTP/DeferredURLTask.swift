@@ -68,7 +68,7 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
     case .timedOut:
       code = .timedOut
     }
-    return URLError(code, failingURL: url, description: error.description)
+    return URLError(code, failingURL: url, reason: error.description)
   }
 
   fileprivate func cancelURLSessionTask() -> Bool
@@ -113,7 +113,7 @@ private func validateURL(_ url: URL?) -> URLError?
 #endif
 
   let message = "DeferredURLTask does not support url scheme \"\(scheme)\""
-  return URLError(.unsupportedURL, failingURL: url, description: message)
+  return URLError(.unsupportedURL, failingURL: url, reason: message)
 }
 
 public class DeferredURLDataTask: DeferredURLTask<Data>
