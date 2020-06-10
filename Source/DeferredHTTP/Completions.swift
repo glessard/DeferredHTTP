@@ -22,7 +22,7 @@ internal func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLEr
     if let error = error
     { // note that response isn't necessarily `nil` here,
       // but does it ever contain any data that's not in the Error?
-      let error = (error as? URLError) ?? URLError(.unknown, userInfo: [NSUnderlyingErrorKey: error])
+      let error = (error as? URLError) ?? URLError(.unknown, failingURL: response?.url, (NSUnderlyingErrorKey, error))
       resolver.resolve(error: error)
       return
     }
@@ -30,7 +30,7 @@ internal func dataCompletion(_ resolver: Resolver<(Data, HTTPURLResponse), URLEr
     if let r = response as? HTTPURLResponse
     { resolver.resolve(value: (data ?? Data(), r)) }
     else // Probably an impossible situation
-    { resolver.resolve(error: URLError(.unknown, userInfo: ["URLResponse": response as Any, "Data": data as Any])) }
+    { resolver.resolve(error: URLError(.unknown, failingURL: response?.url, ("PartialData", data))) }
   }
 }
 
@@ -44,7 +44,7 @@ internal func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLRespon
     if let error = error
     { // note that response isn't necessarily `nil` here,
       // but does it ever contain any data that's not in the Error?
-      let error = (error as? URLError) ?? URLError(.unknown, userInfo: [NSUnderlyingErrorKey: error])
+      let error = (error as? URLError) ?? URLError(.unknown, failingURL: response?.url, (NSUnderlyingErrorKey, error))
       resolver.resolve(error: error)
       return
     }
@@ -60,6 +60,6 @@ internal func downloadCompletion(_ resolver: Resolver<(FileHandle, HTTPURLRespon
       resolver.resolve(value: (handle, response))
     }
     else // can happen if resume data is corrupted; otherwise probably an impossible situation
-    { resolver.resolve(error: URLError(.unknown, userInfo: ["URLResponse": response as Any])) }
+    { resolver.resolve(error: URLError(.unknown, failingURL: response?.url, ("FileURL", location))) }
   }
 }

@@ -8,8 +8,8 @@ let package = Package(
     .library(name: "DeferredHTTP", targets: ["DeferredHTTP"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/glessard/deferred", from: "6.4.0"),
-    .package(url: "https://github.com/glessard/CurrentQoS.git", from: "1.1.0"),
+    .package(url: "https://github.com/glessard/deferred", from: "6.5.0"),
+    .package(url: "https://github.com/glessard/CurrentQoS", from: "1.1.0"),
   ],
   targets: [
     .target(name: "DeferredHTTP", dependencies: ["deferred", "CurrentQoS"]),

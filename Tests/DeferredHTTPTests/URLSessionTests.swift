@@ -238,6 +238,12 @@ extension URLSessionTests
     }
     catch let error as URLError {
       XCTAssertEqual(error.code, .cancelled)
+#if os(Linux) && swift(<5.2.5)
+      print("this tests a corelibs-foundation omission")
+      XCTAssertEqual(error.userInfo.isEmpty, true)
+#else
+      XCTAssertEqual(request.url, error.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+#endif
     }
   }
 
@@ -450,9 +456,9 @@ func partialGET(_ request: URLRequest) -> ([TestURLServer.Command], HTTPURLRespo
 
   let error = URLError(.networkConnectionLost, userInfo: [
     "cut": data.count,
-    NSURLErrorFailingURLStringErrorKey: failURL.absoluteString,
     NSLocalizedDescriptionKey: "dropped",
     NSURLErrorFailingURLErrorKey: failURL,
+    NSURLErrorFailingURLStringErrorKey: failURL.absoluteString,
   ])
   return (commands + [.fail(error)], response)
 }
@@ -655,7 +661,9 @@ extension URLSessionTests
     catch let error as URLError where error.code == .unsupportedURL {
       let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains(request.url?.scheme ?? "$$"), true)
-      XCTAssertEqual(request.url, error.userInfo[NSURLErrorKey] as? URL)
+      XCTAssertEqual(request.url, error.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+      XCTAssertEqual(request.url?.absoluteString,
+                     error.userInfo[NSURLErrorFailingURLStringErrorKey] as? String)
     }
   }
 
@@ -673,6 +681,7 @@ extension URLSessionTests
     catch let error as URLError where error.code == .unsupportedURL {
       let message = error.userInfo[NSLocalizedDescriptionKey] as? String
       XCTAssertEqual(message?.contains("invalid"), true)
+      XCTAssertEqual(request.url, error.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
     }
   }
 
