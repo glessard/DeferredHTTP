@@ -194,12 +194,13 @@ extension URLSessionTests
   func testData_CancelDeferred() throws
   {
     let session = URLSession(configuration: .default)
+    let message = "\(Int.random(in: 0 ... .max))"
 
     let queue = DispatchQueue(label: #function)
     var deferred: DeferredURLTask<Data>! = nil
     queue.sync {
       deferred = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
-      deferred.cancel()
+      deferred.cancel(Cancellation.canceled(message))
       XCTAssertNil(deferred.urlSessionTask)
       deferred.beginExecution()
       queue.async {
@@ -211,7 +212,9 @@ extension URLSessionTests
       let _ = try deferred.get()
       XCTFail("failed to cancel")
     }
-    catch URLError.cancelled {}
+    catch let e as URLError where e.code == .cancelled {
+      XCTAssert(e.localizedDescription.contains(message))
+    }
 
     queue.sync { session.finishTasksAndInvalidate() }
   }
