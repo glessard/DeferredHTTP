@@ -60,22 +60,14 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
 
   open override func convertCancellation<E: Error>(_ error: E) -> URLError?
   {
-    if let error = error as? URLError
+    if let urlError = error as? URLError
     {
-      return error
+      return urlError
     }
 
-    guard let error = error as? Cancellation else { return nil }
+    guard let cancellation = error as? Cancellation else { return nil }
 
-    let code: URLError.Code
-    switch error
-    {
-    case .canceled, .notSelected:
-      code = .cancelled
-    case .timedOut:
-      code = .timedOut
-    }
-    return URLError(code, failingURL: url, reason: error.description)
+    return URLError(.init(cancellation), failingURL: url, reason: cancellation.description)
   }
 
   fileprivate func cancelURLSessionTask() -> Bool

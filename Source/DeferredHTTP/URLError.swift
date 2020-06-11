@@ -22,3 +22,17 @@ extension URLError
     self = URLError(code, userInfo: info)
   }
 }
+
+import enum deferred.Cancellation
+
+extension URLError.Code
+{
+  init(_ c: Cancellation)
+  {
+    switch c
+    {
+    case .canceled: self = .cancelled
+    case .timedOut: self = .timedOut
+    }
+  }
+}
