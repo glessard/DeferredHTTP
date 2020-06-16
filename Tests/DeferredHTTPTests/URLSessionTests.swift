@@ -431,14 +431,12 @@ func incompleteGET(_ request: URLRequest) -> ([TestURLServer.Command], HTTPURLRe
 func partialGET(_ request: URLRequest) -> ([TestURLServer.Command], HTTPURLResponse)
 {
   let (commands, response) = incompleteGET(request)
-  guard case let .load(data) = commands.first! else { fatalError() }
+  guard case .load(_) = commands.first! else { fatalError() }
 
-  let error = URLError(.networkConnectionLost, userInfo: [
-    "cut": data.count,
-    NSLocalizedDescriptionKey: "dropped",
-    NSURLErrorFailingURLErrorKey: failURL,
-    NSURLErrorFailingURLStringErrorKey: failURL.absoluteString,
-  ])
+  var info: [String:Any] = [:]
+  info[NSURLErrorFailingURLErrorKey] = request.url
+  info[NSURLErrorFailingURLStringErrorKey] = request.url?.absoluteString
+  let error = URLError(.networkConnectionLost, userInfo: info)
   return (commands + [.fail(error)], response)
 }
 
