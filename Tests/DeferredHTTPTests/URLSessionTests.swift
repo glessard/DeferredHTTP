@@ -194,19 +194,12 @@ extension URLSessionTests
   func testData_CancelDeferred() throws
   {
     let session = URLSession(configuration: .default)
+    defer { session.finishTasksAndInvalidate() }
     let message = "\(Int.random(in: 0 ... .max))"
 
-    let queue = DispatchQueue(label: #function)
-    var deferred: DeferredURLTask<Data>! = nil
-    queue.sync {
-      deferred = session.deferredDataTask(queue: queue, with: URLRequest(url: unavailableURL))
-      deferred.cancel(Cancellation.canceled(message))
-      XCTAssertNil(deferred.urlSessionTask)
-      deferred.beginExecution()
-      queue.async {
-        XCTAssertNil(deferred.urlSessionTask)
-      }
-    }
+    let deferred = session.deferredDataTask(with: URLRequest(url: unavailableURL))
+    deferred.cancel(Cancellation.canceled(message))
+    XCTAssertNil(deferred.urlSessionTask)
 
     do {
       let _ = try deferred.get()
@@ -215,8 +208,6 @@ extension URLSessionTests
     catch let e as URLError where e.code == .cancelled {
       XCTAssert(e.localizedDescription.contains(message))
     }
-
-    queue.sync { session.finishTasksAndInvalidate() }
   }
 
   func testData_CancelTask() throws
@@ -259,17 +250,11 @@ extension URLSessionTests
 
     let queue = DispatchQueue(label: #function)
     let deferred = session.deferredDataTask(queue: queue, with: request)
-
     deferred.beginExecution()
     queue.sync {}
 
     XCTAssertNotNil(deferred.urlSessionTask)
-    if let task = deferred.urlSessionTask
-    {
-      task.suspend()
-      XCTAssertEqual(task.state, .suspended)
-    }
-
+    deferred.urlSessionTask?.suspend()
     deferred.timeout(seconds: -1)
 
     do {
@@ -284,25 +269,17 @@ extension URLSessionTests
   func testDownload_CancelDeferred() throws
   {
     let session = URLSession(configuration: .default)
+    defer { session.finishTasksAndInvalidate() }
 
-    let queue = DispatchQueue(label: #function)
-    var deferred: DeferredURLTask<FileHandle>! = nil
-    queue.sync {
-      deferred = session.deferredDownloadTask(queue: queue, with: URLRequest(url: unavailableURL))
-      deferred.cancel()
-      XCTAssertNil(deferred.urlSessionTask)
-      queue.async {
-        XCTAssertNil(deferred.urlSessionTask)
-      }
-    }
+    let deferred = session.deferredDownloadTask(with: URLRequest(url: unavailableURL))
+    deferred.cancel()
+    XCTAssertNil(deferred.urlSessionTask)
 
     do {
       let _ = try deferred.get()
       XCTFail("succeeded incorrectly")
     }
     catch URLError.cancelled {}
-
-    queue.sync { session.finishTasksAndInvalidate() }
   }
 
   func testDownload_CancelTask() throws
@@ -339,7 +316,6 @@ extension URLSessionTests
 
     let queue = DispatchQueue(label: #function)
     let deferred = session.deferredDownloadTask(queue: queue, with: request)
-
     deferred.beginExecution()
     queue.sync {}
 
