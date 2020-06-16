@@ -14,11 +14,13 @@ extension URLError
 
   init<T>(_ code: URLError.Code, failingURL url: URL? = nil, _ pair: (String, T?), function: String = #function)
   {
-    var info = [String: Any]()
+    var info = ["Origin": function as Any]
     info[pair.0] = pair.1
-    info["ErrorOrigin"] = function
-    info[NSURLErrorFailingURLErrorKey] = url
-    info[NSURLErrorFailingURLStringErrorKey] = url?.absoluteString
+    if let url = url
+    {
+      info[NSURLErrorFailingURLErrorKey] = url
+      info[NSURLErrorFailingURLStringErrorKey] = url.absoluteString
+    }
     self = URLError(code, userInfo: info)
   }
 }
