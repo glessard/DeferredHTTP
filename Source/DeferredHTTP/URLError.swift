@@ -6,8 +6,9 @@ import Foundation
 
 extension URLError
 {
-  init(_ code: URLError.Code, failingURL url: URL? = nil, description: String? = nil, function: String = #function)
+  init(_ code: URLError.Code, failingURL url: URL? = nil, reason: String = "", function: String = #function)
   {
+    let description: String? = reason.isEmpty ? "" : reason
     self = URLError(code, failingURL: url, (NSLocalizedDescriptionKey, description))
   }
 
@@ -19,5 +20,19 @@ extension URLError
     info[NSURLErrorFailingURLErrorKey] = url
     info[NSURLErrorFailingURLStringErrorKey] = url?.absoluteString
     self = URLError(code, userInfo: info)
+  }
+}
+
+import enum deferred.Cancellation
+
+extension URLError.Code
+{
+  init(_ c: Cancellation)
+  {
+    switch c
+    {
+    case .canceled: self = .cancelled
+    case .timedOut: self = .timedOut
+    }
   }
 }

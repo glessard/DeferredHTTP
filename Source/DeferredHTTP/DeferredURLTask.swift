@@ -58,17 +58,16 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
     }
   }
 
-  open override func convertCancellation(_ error: Cancellation) -> URLError?
+  open override func convertCancellation<E: Error>(_ error: E) -> URLError?
   {
-    let code: URLError.Code
-    switch error
+    if let urlError = error as? URLError
     {
-    case .canceled, .notSelected:
-      code = .cancelled
-    case .timedOut:
-      code = .timedOut
+      return urlError
     }
-    return URLError(code, failingURL: url, description: error.description)
+
+    guard let cancellation = error as? Cancellation else { return nil }
+
+    return URLError(.init(cancellation), failingURL: url, reason: cancellation.description)
   }
 
   fileprivate func cancelURLSessionTask() -> Bool
@@ -82,9 +81,10 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
     return false
   }
 
-  open override func cancel(_ error: Cancellation)
+  open override func cancel<E: Error>(_ error: E)
   {
-    if cancelURLSessionTask() == false
+    if let error = convertCancellation(error),
+       cancelURLSessionTask() == false
     {
       super.cancel(error)
     }
@@ -92,7 +92,7 @@ public class DeferredURLTask<Success>: Deferred<(Success, HTTPURLResponse), URLE
 
   public func cancel(reason: String = "")
   {
-    cancel(.canceled(reason))
+    cancel(URLError(.cancelled, failingURL: url, reason: reason))
   }
 }
 
@@ -113,7 +113,7 @@ private func validateURL(_ url: URL?) -> URLError?
 #endif
 
   let message = "DeferredURLTask does not support url scheme \"\(scheme)\""
-  return URLError(.unsupportedURL, failingURL: url, description: message)
+  return URLError(.unsupportedURL, failingURL: url, reason: message)
 }
 
 public class DeferredURLDataTask: DeferredURLTask<Data>
@@ -235,14 +235,15 @@ extension DeferredURLTask
   {
     if self.isResolved { return self }
 
+    let timedOut = URLError(.timedOut, failingURL: url, reason: reason)
     if deadline < .now()
     {
-      cancel(.canceled(reason))
+      cancel(timedOut)
     }
     else if deadline != .distantFuture
     {
       let queue = DispatchQueue(label: "timeout", qos: qos)
-      queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel(.canceled(reason)) }
+      queue.asyncAfter(deadline: deadline) { [weak self] in self?.cancel(timedOut) }
     }
     return self
   }
