@@ -248,15 +248,3 @@ extension DeferredURLTask
     return self
   }
 }
-
-extension URLError
-{
-  public func getPartialDownloadResumeData() -> Data?
-  {
-#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
-    // rdar://29623544 and https://bugs.swift.org/browse/SR-3403
-    let URLSessionDownloadTaskResumeData = NSURLSessionDownloadTaskResumeData
-#endif
-    return userInfo[URLSessionDownloadTaskResumeData] as? Data
-  }
-}

@@ -4,6 +4,10 @@
 
 import Foundation
 
+#if canImport(FoundationNetworking)
+import let FoundationNetworking.URLSessionDownloadTaskResumeData
+#endif
+
 extension URLError
 {
   init(_ code: URLError.Code, failingURL url: URL? = nil, reason: String = "", function: String = #function)
@@ -22,6 +26,18 @@ extension URLError
       info[NSURLErrorFailingURLStringErrorKey] = url.absoluteString
     }
     self = URLError(code, userInfo: info)
+  }
+}
+
+extension URLError
+{
+  public func getPartialDownloadResumeData() -> Data?
+  {
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+    // rdar://29623544 and https://bugs.swift.org/browse/SR-3403
+    let URLSessionDownloadTaskResumeData = NSURLSessionDownloadTaskResumeData
+#endif
+    return userInfo[URLSessionDownloadTaskResumeData] as? Data
   }
 }
 
